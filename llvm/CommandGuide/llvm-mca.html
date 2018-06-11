@@ -1,0 +1,305 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>llvm-mca - LLVM Machine Code Analyzer &#8212; LLVM 7 documentation</title>
+    <link rel="stylesheet" href="../_static/llvm-theme.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" src="../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="bugpoint - automatic test case reduction tool" href="bugpoint.html" />
+    <link rel="prev" title="dsymutil - manipulate archived DWARF debug symbol files" href="dsymutil.html" />
+<style type="text/css">
+  table.right { float: right; margin-left: 20px; }
+  table.right td { border: 1px solid #ccc; }
+</style>
+
+  </head><body>
+<div class="logo">
+  <a href="../index.html">
+    <img src="../_static/logo.png"
+         alt="LLVM Logo" width="250" height="88"/></a>
+</div>
+
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="bugpoint.html" title="bugpoint - automatic test case reduction tool"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="dsymutil.html" title="dsymutil - manipulate archived DWARF debug symbol files"
+             accesskey="P">previous</a> |</li>
+  <li><a href="http://llvm.org/">LLVM Home</a>&nbsp;|&nbsp;</li>
+  <li><a href="../index.html">Documentation</a>&raquo;</li>
+
+          <li class="nav-item nav-item-1"><a href="index.html" accesskey="U">LLVM Command Guide</a> &#187;</li> 
+      </ul>
+    </div>
+
+
+    <div class="document">
+      <div class="documentwrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="llvm-mca-llvm-machine-code-analyzer">
+<h1>llvm-mca - LLVM Machine Code Analyzer<a class="headerlink" href="#llvm-mca-llvm-machine-code-analyzer" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="synopsis">
+<h2>SYNOPSIS<a class="headerlink" href="#synopsis" title="Permalink to this headline">¶</a></h2>
+<p><strong class="program">llvm-mca</strong> [<em>options</em>] [input]</p>
+</div>
+<div class="section" id="description">
+<h2>DESCRIPTION<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h2>
+<p><strong class="program">llvm-mca</strong> is a performance analysis tool that uses information
+available in LLVM (e.g. scheduling models) to statically measure the performance
+of machine code in a specific CPU.</p>
+<p>Performance is measured in terms of throughput as well as processor resource
+consumption. The tool currently works for processors with an out-of-order
+backend, for which there is a scheduling model available in LLVM.</p>
+<p>The main goal of this tool is not just to predict the performance of the code
+when run on the target, but also help with diagnosing potential performance
+issues.</p>
+<p>Given an assembly code sequence, llvm-mca estimates the IPC (Instructions Per
+Cycle), as well as hardware resource pressure. The analysis and reporting style
+were inspired by the IACA tool from Intel.</p>
+<p><strong class="program">llvm-mca</strong> allows the usage of special code comments to mark regions of
+the assembly code to be analyzed.  A comment starting with substring
+<code class="docutils literal notranslate"><span class="pre">LLVM-MCA-BEGIN</span></code> marks the beginning of a code region. A comment starting with
+substring <code class="docutils literal notranslate"><span class="pre">LLVM-MCA-END</span></code> marks the end of a code region.  For example:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span># LLVM-MCA-BEGIN My Code Region
+  ...
+# LLVM-MCA-END
+</pre></div>
+</div>
+<p>Multiple regions can be specified provided that they do not overlap.  A code
+region can have an optional description. If no user-defined region is specified,
+then <strong class="program">llvm-mca</strong> assumes a default region which contains every
+instruction in the input file.  Every region is analyzed in isolation, and the
+final performance report is the union of all the reports generated for every
+code region.</p>
+<p>Inline assembly directives may be used from source code to annotate the
+assembly text:</p>
+<div class="highlight-c++ notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span> <span class="nf">foo</span><span class="p">(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kr">__asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;# LLVM-MCA-BEGIN foo&quot;</span><span class="p">);</span>
+  <span class="n">a</span> <span class="o">+=</span> <span class="mi">42</span><span class="p">;</span>
+  <span class="kr">__asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&quot;# LLVM-MCA-END&quot;</span><span class="p">);</span>
+  <span class="n">a</span> <span class="o">*=</span> <span class="n">b</span><span class="p">;</span>
+  <span class="k">return</span> <span class="n">a</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>So for example, you can compile code with clang, output assembly, and pipe it
+directly into llvm-mca for analysis:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ clang foo.c -O2 -target x86_64-unknown-unknown -S -o - <span class="p">|</span> llvm-mca -mcpu<span class="o">=</span>btver2
+</pre></div>
+</div>
+</div>
+<div class="section" id="options">
+<h2>OPTIONS<a class="headerlink" href="#options" title="Permalink to this headline">¶</a></h2>
+<p>If <code class="docutils literal notranslate"><span class="pre">input</span></code> is “<code class="docutils literal notranslate"><span class="pre">-</span></code>” or omitted, <strong class="program">llvm-mca</strong> reads from standard
+input. Otherwise, it will read from the specified filename.</p>
+<p>If the <a class="reference internal" href="opt.html#cmdoption-o"><code class="xref std std-option docutils literal notranslate"><span class="pre">-o</span></code></a> option is omitted, then <strong class="program">llvm-mca</strong> will send its output
+to standard output if the input is from standard input.  If the <a class="reference internal" href="opt.html#cmdoption-o"><code class="xref std std-option docutils literal notranslate"><span class="pre">-o</span></code></a>
+option specifies “<code class="docutils literal notranslate"><span class="pre">-</span></code>“, then the output will also be sent to standard output.</p>
+<dl class="option">
+<dt id="cmdoption-help">
+<code class="descname">-help</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-help" title="Permalink to this definition">¶</a></dt>
+<dd><p>Print a summary of command line options.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-mtriple">
+<code class="descname">-mtriple</code><code class="descclassname">=&lt;target triple&gt;</code><a class="headerlink" href="#cmdoption-mtriple" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify a target triple string.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-march">
+<code class="descname">-march</code><code class="descclassname">=&lt;arch&gt;</code><a class="headerlink" href="#cmdoption-march" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify the architecture for which to analyze the code. It defaults to the
+host default target.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-mcpu">
+<code class="descname">-mcpu</code><code class="descclassname">=&lt;cpuname&gt;</code><a class="headerlink" href="#cmdoption-mcpu" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify the processor for which to analyze the code.  By default, the cpu name
+is autodetected from the host.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-output-asm-variant">
+<code class="descname">-output-asm-variant</code><code class="descclassname">=&lt;variant id&gt;</code><a class="headerlink" href="#cmdoption-output-asm-variant" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify the output assembly variant for the report generated by the tool.
+On x86, possible values are [0, 1]. A value of 0 (vic. 1) for this flag enables
+the AT&amp;T (vic. Intel) assembly format for the code printed out by the tool in
+the analysis report.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-dispatch">
+<code class="descname">-dispatch</code><code class="descclassname">=&lt;width&gt;</code><a class="headerlink" href="#cmdoption-dispatch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify a different dispatch width for the processor. The dispatch width
+defaults to field ‘IssueWidth’ in the processor scheduling model.  If width is
+zero, then the default dispatch width is used.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-register-file-size">
+<code class="descname">-register-file-size</code><code class="descclassname">=&lt;size&gt;</code><a class="headerlink" href="#cmdoption-register-file-size" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify the size of the register file. When specified, this flag limits how
+many temporary registers are available for register renaming purposes. A value
+of zero for this flag means “unlimited number of temporary registers”.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-iterations">
+<code class="descname">-iterations</code><code class="descclassname">=&lt;number of iterations&gt;</code><a class="headerlink" href="#cmdoption-iterations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify the number of iterations to run. If this flag is set to 0, then the
+tool sets the number of iterations to a default value (i.e. 100).</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-noalias">
+<code class="descname">-noalias</code><code class="descclassname">=&lt;bool&gt;</code><a class="headerlink" href="#cmdoption-noalias" title="Permalink to this definition">¶</a></dt>
+<dd><p>If set, the tool assumes that loads and stores don’t alias. This is the
+default behavior.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-lqueue">
+<code class="descname">-lqueue</code><code class="descclassname">=&lt;load queue size&gt;</code><a class="headerlink" href="#cmdoption-lqueue" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify the size of the load queue in the load/store unit emulated by the tool.
+By default, the tool assumes an unbound number of entries in the load queue.
+A value of zero for this flag is ignored, and the default load queue size is
+used instead.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-squeue">
+<code class="descname">-squeue</code><code class="descclassname">=&lt;store queue size&gt;</code><a class="headerlink" href="#cmdoption-squeue" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specify the size of the store queue in the load/store unit emulated by the
+tool. By default, the tool assumes an unbound number of entries in the store
+queue. A value of zero for this flag is ignored, and the default store queue
+size is used instead.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-timeline">
+<code class="descname">-timeline</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-timeline" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable the timeline view.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-timeline-max-iterations">
+<code class="descname">-timeline-max-iterations</code><code class="descclassname">=&lt;iterations&gt;</code><a class="headerlink" href="#cmdoption-timeline-max-iterations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Limit the number of iterations to print in the timeline view. By default, the
+timeline view prints information for up to 10 iterations.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-timeline-max-cycles">
+<code class="descname">-timeline-max-cycles</code><code class="descclassname">=&lt;cycles&gt;</code><a class="headerlink" href="#cmdoption-timeline-max-cycles" title="Permalink to this definition">¶</a></dt>
+<dd><p>Limit the number of cycles in the timeline view. By default, the number of
+cycles is set to 80.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-resource-pressure">
+<code class="descname">-resource-pressure</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-resource-pressure" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable the resource pressure view. This is enabled by default.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-register-file-stats">
+<code class="descname">-register-file-stats</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-register-file-stats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable register file usage statistics.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-dispatch-stats">
+<code class="descname">-dispatch-stats</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-dispatch-stats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable extra dispatch statistics. This view collects and analyzes instruction
+dispatch events, as well as static/dynamic dispatch stall events. This view
+is disabled by default.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-scheduler-stats">
+<code class="descname">-scheduler-stats</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-scheduler-stats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable extra scheduler statistics. This view collects and analyzes instruction
+issue events. This view is disabled by default.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-retire-stats">
+<code class="descname">-retire-stats</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-retire-stats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable extra retire control unit statistics. This view is disabled by default.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-instruction-info">
+<code class="descname">-instruction-info</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-instruction-info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable the instruction info view. This is enabled by default.</p>
+</dd></dl>
+
+<dl class="option">
+<dt id="cmdoption-instruction-tables">
+<code class="descname">-instruction-tables</code><code class="descclassname"></code><a class="headerlink" href="#cmdoption-instruction-tables" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prints resource pressure information based on the static information
+available from the processor model. This differs from the resource pressure
+view because it doesn’t require that the code is simulated. It instead prints
+the theoretical uniform distribution of resource pressure for every
+instruction in sequence.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="exit-status">
+<h2>EXIT STATUS<a class="headerlink" href="#exit-status" title="Permalink to this headline">¶</a></h2>
+<p><strong class="program">llvm-mca</strong> returns 0 on success. Otherwise, an error message is printed
+to standard error, and the tool returns 1.</p>
+</div>
+</div>
+
+
+          </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="bugpoint.html" title="bugpoint - automatic test case reduction tool"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="dsymutil.html" title="dsymutil - manipulate archived DWARF debug symbol files"
+             >previous</a> |</li>
+  <li><a href="http://llvm.org/">LLVM Home</a>&nbsp;|&nbsp;</li>
+  <li><a href="../index.html">Documentation</a>&raquo;</li>
+
+          <li class="nav-item nav-item-1"><a href="index.html" >LLVM Command Guide</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2003-2018, LLVM Project.
+      Last updated on 2018-05-16.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.7.4.
+    </div>
+  </body>
+</html>
